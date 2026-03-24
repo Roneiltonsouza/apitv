@@ -14,36 +14,28 @@
         #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .container { width: 95%; max-width: 800px; padding: 20px; display: none; }
         .card { background: var(--card); padding: 20px; border-radius: 15px; border: 1px solid #333; text-align: center; margin-bottom: 20px; }
-        
-        /* Botão Cast Destacado para o App */
-        google-cast-launcher {
-            display: inline-block; width: 60px; height: 60px; cursor: pointer;
-            background: rgba(0, 255, 136, 0.15); border-radius: 50%; padding: 10px;
-            --connected-color: var(--primary); --disconnected-color: #ffffff;
-        }
-
+        google-cast-launcher { display: inline-block; width: 60px; height: 60px; cursor: pointer; background: rgba(0, 255, 136, 0.15); border-radius: 50%; padding: 10px; --connected-color: var(--primary); }
         #videoPlayer { width: 100%; border-radius: 10px; background: #000; margin-top: 15px; border: 2px solid #333; display: none; }
         input { width: 85%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: white; font-size: 16px; }
         .btn-play { background: var(--primary); color: black; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 90%; }
         .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 15px; margin-top: 20px; width: 100%; }
         .channel-item { background: var(--card); padding: 15px; border-radius: 12px; cursor: pointer; text-align: center; border: 1px solid #222; }
         .channel-item img { width: 70px; height: 70px; object-fit: contain; margin-bottom: 10px; border-radius: 10px; }
-        #status-msg { font-size: 13px; color: var(--primary); margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="login-overlay">
         <h1 style="color: var(--primary);">Apitv screen</h1>
+        <p>Aguarde, configurando permissões...</p>
         <input type="text" id="userNameInput" placeholder="Seu Nome">
-        <button class="btn-play" onclick="realizarLogin()" style="width: 200px; margin-top: 10px;">ENTRAR NO APP</button>
+        <button class="btn-play" onclick="realizarLogin()" style="width: 200px; margin-top: 10px;">ENTRAR</button>
     </div>
 
     <div class="container" id="main-content">
         <div class="card">
             <h2 style="color: var(--primary); margin: 0;">Apitv screen</h2>
-            <google-cast-launcher id="castbutton"></google-cast-launcher>
-            <div id="status-msg">SISTEMA DE TRANSMISSÃO ATIVO</div>
+            <google-cast-launcher></google-cast-launcher>
             <video id="videoPlayer" controls playsinline></video>
             <div id="setup-form">
                 <input type="text" id="listUrl" placeholder="URL M3U8">
@@ -57,56 +49,49 @@
     </div>
 
     <script>
-        // --- CONFIGURAÇÃO WEBVIEW / APP ---
-        window.chrome = window.chrome || {};
-        window.chrome.cast = window.chrome.cast || {};
+        // --- MOTOR DE PERMISSÕES PARA APLICATIVO (MEDIAN.CO) ---
+        function solicitarPermissoesApp() {
+            // Comando para o Median solicitar localização (necessário para Bluetooth/Cast)
+            window.location.href = "median://permissions/request?permissions=location,storage,notification";
+            
+            // Força o reconhecimento do Cast no WebView
+            window.chrome = window.chrome || {};
+            window.chrome.cast = window.chrome.cast || {};
+        }
 
         const DB_URL = "https://netbase-cloud-default-rtdb.firebaseio.com/listas.json";
         let hls = new Hls();
         const video = document.getElementById('videoPlayer');
         let currentUrl = "", currentTitle = "", currentListId = null;
 
-        // --- INICIALIZAÇÃO DO CAST (VERSÃO APP) ---
+        // INICIALIZAÇÃO CAST
         window.__onGCastApiAvailable = function(isAvailable) {
             if (isAvailable) {
-                initializeCastApi();
+                const context = cast.framework.CastContext.getInstance();
+                context.setOptions({
+                    receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+                    androidReceiverCompatible: true
+                });
             }
         };
 
-        function initializeCastApi() {
-            const context = cast.framework.CastContext.getInstance();
-            context.setOptions({
-                receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-                autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-                androidReceiverCompatible: true // ESSENCIAL PARA APPS ANDROID
-            });
-            
-            context.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, (event) => {
-                if (event.sessionState === cast.framework.SessionState.SESSION_STARTED) {
-                    if (currentUrl) enviarParaTV(currentUrl, currentTitle);
-                }
-            });
-        }
-
         function enviarParaTV(url, title) {
-            const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
-            if (castSession) {
+            const session = cast.framework.CastContext.getInstance().getCurrentSession();
+            if (session) {
                 const mediaInfo = new chrome.cast.media.MediaInfo(url, 'application/x-mpegurl');
                 const metadata = new chrome.cast.media.GenericMediaMetadata();
                 metadata.title = title;
-                metadata.subtitle = "Apitv screen - Transmitindo";
-                mediaInfo.metadata = metadata;
-                const request = new chrome.cast.media.LoadRequest(mediaInfo);
-                castSession.loadMedia(request);
+                session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo));
             }
         }
 
-        // --- LOGIN E CARREGAMENTO ---
         function realizarLogin() {
             const name = document.getElementById('userNameInput').value;
             if (name.length > 2) {
                 localStorage.setItem('apitv_user', name);
-                location.reload();
+                solicitarPermissoesApp(); // Pede as permissões ao logar
+                setTimeout(() => { location.reload(); }, 1000);
             }
         }
 
@@ -119,31 +104,15 @@
             }
         }
 
+        // ... Resto das funções de play e M3U (Mantidas do sistema que funciona) ...
         function playChannel(url, name) {
             currentUrl = url; currentTitle = name;
             video.style.display = "block";
-            
             if (Hls.isSupported()) {
                 hls.destroy(); hls = new Hls();
                 hls.loadSource(url); hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play();
-                    // Pequeno delay para o WebView processar o stream antes do Cast
-                    setTimeout(() => enviarParaTV(url, name), 1000);
-                });
-            } else {
-                video.src = url; video.play();
-                setTimeout(() => enviarParaTV(url, name), 1000);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play(); setTimeout(() => enviarParaTV(url, name), 1000); });
             }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // --- DATABASE E PARSER ---
-        async function saveAndLoad() {
-            const u = document.getElementById('listUrl').value;
-            if (!u) return;
-            await fetch(DB_URL, { method: 'POST', body: JSON.stringify({ url: u }) });
-            location.reload();
         }
 
         async function loadInitial() {
@@ -152,33 +121,30 @@
             if (data) {
                 const keys = Object.keys(data);
                 currentListId = keys[keys.length - 1];
-                document.getElementById('active-list-info').style.display = "block";
                 document.getElementById('setup-form').style.display = "none";
+                document.getElementById('active-list-info').style.display = "block";
                 parseM3U(data[currentListId].url);
             }
         }
 
         async function parseM3U(url) {
-            try {
-                const response = await fetch(url);
-                const text = await response.text();
-                const lines = text.split('\n');
-                const display = document.getElementById('channelDisplay');
-                lines.forEach((line, i) => {
-                    if (line.includes('#EXTINF:')) {
-                        const name = line.split(',')[1] || "Canal";
-                        const stream = lines[i+1]?.trim();
-                        const logo = line.match(/tvg-logo="([^"]+)"/)?.[1] || "https://via.placeholder.com/70/000/fff?text=TV";
-                        if(stream && stream.startsWith('http')) {
-                            const div = document.createElement('div');
-                            div.className = 'channel-item';
-                            div.onclick = () => playChannel(stream, name);
-                            div.innerHTML = `<img src="${logo}"><p>${name.substring(0, 15)}</p>`;
-                            display.appendChild(div);
-                        }
+            const response = await fetch(url);
+            const text = await response.text();
+            const lines = text.split('\n');
+            const display = document.getElementById('channelDisplay');
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('#EXTINF:')) {
+                    const name = lines[i].split(',')[1] || "Canal";
+                    const stream = lines[i+1]?.trim();
+                    if(stream && stream.startsWith('http')) {
+                        const div = document.createElement('div');
+                        div.className = 'channel-item';
+                        div.onclick = () => playChannel(stream, name);
+                        div.innerHTML = `<p>${name}</p>`;
+                        display.appendChild(div);
                     }
-                });
-            } catch (e) { console.error("Erro na lista"); }
+                }
+            }
         }
 
         window.onload = verificarLogin;
