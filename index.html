@@ -9,11 +9,11 @@
     <script src="https://cdn.jsdelivr.net/npm/cdnbye@latest/dist/hlsjs-p2p-engine.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/clappr-pip@latest/dist/clappr-pip.min.js"></script>
     
-    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-    <script src="https://cdn.jsdelivr.net/npm/clappr-chromecast-plugin@latest/dist/clappr-chromecast-plugin.min.js"></script>
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
     <style>
         :root { --primary: #00ff88; --bg: #0a0a0a; --card: #161616; --header-bg: #000; }
+        
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; margin: 0; padding-top: 135px; display: flex; flex-direction: column; align-items: center; }
         
         .main-header { 
@@ -23,37 +23,44 @@
         }
 
         .header-title { color: var(--primary); margin: 0; font-size: 18px; letter-spacing: 2px; font-weight: bold; text-transform: uppercase; cursor: pointer; }
+        
         .header-actions { display: flex; gap: 8px; align-items: center; }
-
         .btn-fs-header { background: #111; color: var(--primary); border: 1px solid var(--primary); width: 35px; height: 35px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
         .btn-privado-header { background: #111; color: var(--primary); border: 1px solid var(--primary); padding: 8px 15px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; height: 35px; }
 
         .genre-bar { position: fixed; top: 60px; left: 0; width: 100%; background: #0d0d0d; z-index: 1000; padding: 12px 0; border-bottom: 1px solid #222; }
         .tabs-container { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding: 0 15px; align-items: center; }
         .tabs-container::-webkit-scrollbar { display: none; }
-        
         .tab-btn { background: #222; color: #777; border: 1px solid #333; padding: 10px 22px; border-radius: 25px; cursor: pointer; font-weight: bold; white-space: nowrap; font-size: 13px; }
         .tab-btn.active { background: var(--primary); color: black; border-color: var(--primary); }
 
         .container { width: 95%; max-width: 850px; padding: 10px; }
-        #player-wrapper { width: 100%; background: #000; aspect-ratio: 16/9; border-radius: 12px; border: 2px solid var(--primary); box-shadow: 0 4px 15px rgba(0,0,0,0.5); overflow: hidden; margin-bottom: 20px; display: none; }
-        
+        #player-wrapper { 
+            width: 100%; background: #000; aspect-ratio: 16/9; 
+            border-radius: 12px; border: 2px solid var(--primary); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); overflow: hidden; margin-bottom: 20px; display: none;
+        }
+
         .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 15px; width: 100%; }
         .channel-item { background: var(--card); padding: 15px; border-radius: 12px; cursor: pointer; text-align: center; border: 1px solid #222; transition: 0.3s; }
         .channel-item:hover { border-color: var(--primary); transform: scale(1.03); }
         .channel-item img { width: 70px; height: 70px; object-fit: contain; margin-bottom: 10px; border-radius: 10px; background: #000; }
+        .channel-item p { font-size: 11px; margin: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
         #status-msg { font-size: 10px; color: var(--primary); font-weight: bold; text-align: center; margin-bottom: 10px; text-transform: uppercase; }
 
         #private-panel { display: none; background: #0f0f0f; padding: 30px; border-radius: 20px; border: 1px solid var(--primary); text-align: center; margin-top: 20px; }
         input { width: 90%; padding: 15px; margin: 12px 0; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: white; font-size: 16px; outline: none; }
         .btn-play { background: var(--primary); color: black; border: none; padding: 18px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 95%; font-size: 14px; text-transform: uppercase; }
+        
+        /* Botão invisível do Google Cast para manter a interface limpa */
+        #cast-trigger { display: none; }
     </style>
 </head>
 <body>
 
     <header class="main-header">
-        <h1 class="header-title">APITV SCREEN</h1>
+        <h1 class="header-title" onclick="abrirMenuCast()">APITV SCREEN</h1>
         <div class="header-actions">
             <button class="btn-fs-header" onclick="toggleFullScreen()">⛶</button>
             <button class="btn-privado-header" onclick="acessoSeguro()">USUÁRIO PRIVADO</button>
@@ -69,15 +76,19 @@
     </nav>
 
     <div class="container">
-        <div id="status-msg">Sincronizando...</div>
+        <div id="status-msg">Sincronizando Grade...</div>
         <div id="player-wrapper"></div>
         <div id="channelDisplay" class="channel-grid"></div>
+        
         <div id="private-panel">
+            <h3 style="color: var(--primary);">Painel Cloud</h3>
             <input type="text" id="listName" placeholder="Nome da Lista">
             <input type="text" id="listUrl" placeholder="Link M3U8">
-            <button class="btn-play" onclick="saveAndSync()">ATUALIZAR CLOUD</button>
+            <button class="btn-play" onclick="saveAndSync()">ATUALIZAR TODOS OS APPS</button>
         </div>
     </div>
+
+    <google-cast-launcher id="cast-trigger"></google-cast-launcher>
 
     <script>
         const API_KEY = "AIza58AfRp1KcBIxoobHdZ2gFzL4WesjLpWWTmB";
@@ -87,48 +98,72 @@
         let player;
         let allChannels = [];
         let currentCategory = 'Vidyou tv Aberta';
+        
+        // VARIÁVEIS DO SEU SISTEMA
+        let currentUrl = "";
+        let currentTitle = "";
 
-        // Configuração para tentativa de conexão automática (Auto-Join)
+        // INICIALIZAÇÃO DO GOOGLE CAST
         window.__onGCastApiAvailable = function(isAvailable) {
             if (isAvailable) {
-                const sessionRequest = new chrome.cast.SessionRequest(chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID);
-                const apiConfig = new chrome.cast.ApiConfig(sessionRequest, 
-                    (session) => console.log("Sessão ativa na TV"), 
-                    (receiver) => console.log("TV encontrada"),
-                    chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED // Tenta conectar sozinho se já conectou antes
-                );
-                chrome.cast.initialize(apiConfig, () => console.log("Cast Init"), (e) => console.error(e));
+                cast.framework.CastContext.getInstance().setOptions({
+                    receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                });
             }
         };
 
-        function iniciarPlayer(url, name) {
-            document.getElementById('player-wrapper').style.display = 'block';
-            document.getElementById('status-msg').innerText = "ENVIANDO PARA TV: " + name;
+        function enviarParaTV(url, title) {
+            const context = cast.framework.CastContext.getInstance();
+            const castSession = context.getCurrentSession();
+            if (castSession) {
+                const mediaInfo = new chrome.cast.media.MediaInfo(url, 'application/x-mpegurl');
+                const metadata = new chrome.cast.media.GenericMediaMetadata();
+                metadata.title = title;
+                metadata.metadataType = chrome.cast.media.MetadataType.GENERIC;
+                mediaInfo.metadata = metadata;
+                const request = new chrome.cast.media.LoadRequest(mediaInfo);
+                castSession.loadMedia(request);
+            }
+        }
 
-            if (player) { player.destroy(); }
+        function abrirMenuCast() {
+            // Clica no botão invisível do Google Cast para abrir a busca de TVs
+            const trigger = document.getElementById('cast-trigger');
+            if (trigger) trigger.click();
+        }
+
+        function iniciarPlayer(url, name) {
+            currentUrl = url;
+            currentTitle = name;
+            document.getElementById('player-wrapper').style.display = 'block';
+            document.getElementById('status-msg').innerText = "ASSISTINDO: " + name;
+
+            if (player) player.destroy();
             
             player = new Clappr.Player({
                 source: url,
                 parentId: "#player-wrapper",
                 width: '100%', height: '100%',
-                autoPlay: true,
-                plugins: [ClapprPip.PipButton, ClapprPip.PipPlugin, ChromecastPlugin],
-                chromecast: {
-                    appId: '9DFB77C0',
-                    media: { title: name, subtitle: 'Sincronizado' }
-                }
+                autoPlay: true
             });
 
-            // GATILHO AUTOMÁTICO: Tenta abrir a busca da TV assim que o canal carrega
-            setTimeout(() => {
-                const castBtn = document.querySelector('[data-chromecast]');
-                if (castBtn) castBtn.click();
-            }, 1500);
-
+            // Se já houver uma TV conectada, envia o canal na hora
+            enviarParaTV(url, name);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // Funções da Nuvem
+        // Listener para conexão no meio do vídeo
+        window.addEventListener('load', () => {
+            const context = cast.framework.CastContext.getInstance();
+            context.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, (event) => {
+                if (event.sessionState === cast.framework.SessionState.SESSION_STARTED) {
+                    if (currentUrl) enviarParaTV(currentUrl, currentTitle);
+                }
+            });
+        });
+
+        // O resto das suas funções originais de grade e nuvem...
         async function loadCloud() {
             const res = await fetch(`${DB_URL}.json?auth=${API_KEY}`);
             const data = await res.json();
@@ -175,7 +210,7 @@
         }
 
         function acessoSeguro() { if (prompt("ID Único:") === ID_ACESSO) switchTab('privado', document.querySelector('.btn-privado-header')); }
-        
+
         function switchTab(cat, btn) {
             currentCategory = cat;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
