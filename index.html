@@ -44,7 +44,6 @@
 
         .container { width: 95%; max-width: 850px; padding: 10px; }
         
-        /* Wrappers de Vídeo */
         #player-wrapper, #twitch-container { 
             width: 100%; background: #000; aspect-ratio: 16/9; 
             border-radius: 12px; border: 2px solid var(--primary); 
@@ -69,7 +68,6 @@
 
         .yt-manager-box { margin-top: 20px; text-align: left; background: #111; border-radius: 10px; padding: 10px; max-height: 250px; overflow-y: auto; border: 1px solid #222; }
         .yt-manager-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #222; font-size: 12px; }
-        .yt-manager-actions span { margin-left: 12px; cursor: pointer; font-weight: bold; text-transform: uppercase; }
         
         google-cast-launcher { display: none; }
     </style>
@@ -99,9 +97,7 @@
         <div id="status-msg">Sincronizando Grade...</div>
         
         <div id="player-wrapper"></div>
-        
         <div id="twitch-container"></div>
-
         <div id="channelDisplay" class="channel-grid"></div>
 
         <div id="private-panel">
@@ -113,7 +109,6 @@
             <hr style="border: 1px solid #222; margin: 20px 0;">
             
             <h3 id="yt-form-title" style="color: #ff0000;">Gerenciar Conteúdo</h3>
-            <input type="hidden" id="ytEditId">
             <select id="ytCategory">
                 <option value="Live YouTube">Live YouTube</option>
                 <option value="Filmes">Filmes</option>
@@ -122,14 +117,8 @@
             <input type="text" id="ytLogo" placeholder="Link da Logo">
             <input type="text" id="ytUrl" placeholder="Link (YouTube ou BrStream)">
             <button id="btn-yt-save" class="btn-play" style="background: #ff0000; color: white;" onclick="saveYoutube()">SALVAR CONTEÚDO</button>
-            <button id="btn-yt-cancel" style="display:none; background: #333; color: white; margin-top: 10px;" class="btn-play" onclick="cancelYtEdit()">CANCELAR EDIÇÃO</button>
 
             <div class="yt-manager-box" id="yt-manager-list"></div>
-
-            <div id="active-list-info" style="display:none; margin-top: 20px;">
-                <span id="currentListName"></span><br><br>
-                <button style="color:red; background:none; border:none; cursor:pointer;" onclick="deleteList()">[ APAGAR NUVEM ]</button>
-            </div>
         </div>
     </div>
 
@@ -179,40 +168,62 @@
 
         function carregarTwitchManual() {
             document.getElementById('status-msg').innerText = "CONECTANDO AO SINAL PRISM...";
-            document.getElementById('twitch-container').innerHTML = ''; // Limpa para evitar duplicados
-            
+            document.getElementById('twitch-container').innerHTML = '';
             twitchPlayer = new Twitch.Player("twitch-container", {
-                channel: "lexwelldy", // SEU USUÁRIO DA TWITCH AQUI
+                channel: "lexwelldy",
                 width: "100%",
                 height: "100%",
                 autoplay: true,
-                parent: ["localhost", "roneilton-souza.github.io"] // Ajuste para o seu domínio final
+                parent: ["localhost", "roneilton-souza.github.io"]
             });
         }
 
         function iniciarPlayer(url, name) {
             const container = document.getElementById('player-wrapper');
-            const twitchContainer = document.getElementById('twitch-container');
-            
-            twitchContainer.style.display = 'none';
+            document.getElementById('twitch-container').style.display = 'none';
             container.style.display = 'block';
             document.getElementById('status-msg').innerText = "ASSISTINDO: " + name;
             
             if (player) player.destroy();
+            container.innerHTML = "";
 
             if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                let vid = url.split('v=')[1] || url.split('/').pop().split('?')[0];
-                if(url.includes('live/')) vid = url.split('live/')[1].split('?')[0];
+                let vid = "";
+                if(url.includes('v=')) vid = url.split('v=')[1].split('&')[0];
+                else if(url.includes('live/')) vid = url.split('live/')[1].split('?')[0];
+                else vid = url.split('/').pop().split('?')[0];
                 container.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${vid}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
             } else {
-                let config = { 
+                player = new Clappr.Player({ 
                     source: url, parentId: "#player-wrapper", width: '100%', height: '100%', autoPlay: true,
                     plugins: [ClapprPip.PipButton, ClapprPip.PipPlugin],
                     playback: { hlsjsConfig: { enableWorker: true } }
-                };
-                player = new Clappr.Player(config);
+                });
             }
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // FUNÇÃO DE SALVAR CORRIGIDA PARA O BOTÃO
+        async function saveYoutube() {
+            const data = {
+                name: document.getElementById('ytName').value,
+                url: document.getElementById('ytUrl').value,
+                logo: document.getElementById('ytLogo').value,
+                group: document.getElementById('ytCategory').value
+            };
+            if(!data.name || !data.url) return alert("Preencha Nome e Link!");
+            await fetch(`${YT_URL}.json?auth=${API_KEY}`, { method: 'POST', body: JSON.stringify(data) });
+            alert("Conteúdo Salvo!");
+            loadCloud();
+        }
+
+        async function saveAndSync() {
+            const name = document.getElementById('listName').value;
+            const url = document.getElementById('listUrl').value;
+            if(!name || !url) return alert("Preencha a lista!");
+            await fetch(`${DB_URL}.json?auth=${API_KEY}`, { method: 'POST', body: JSON.stringify({name, url}) });
+            alert("Lista Atualizada!");
+            loadCloud();
         }
 
         async function loadCloud() {
@@ -221,17 +232,12 @@
             if (data) {
                 const keys = Object.keys(data);
                 currentListId = keys[keys.length - 1];
-                document.getElementById('active-list-info').style.display = "block";
                 parseM3U(data[currentListId].url);
             }
-            
             const resYt = await fetch(`${YT_URL}.json?auth=${API_KEY}`);
             const dataYt = await resYt.json();
-            if (dataYt) {
-                ytChannels = Object.keys(dataYt).map(id => {
-                    return { ...dataYt[id], id, group: dataYt[id].group || 'Live YouTube' };
-                });
-            }
+            ytChannels = dataYt ? Object.keys(dataYt).map(id => ({ ...dataYt[id], id, group: dataYt[id].group || 'Live YouTube' })) : [];
+            renderChannels();
         }
 
         async function parseM3U(url) {
@@ -249,7 +255,7 @@
                     }
                 }
                 renderChannels();
-            } catch(e) { document.getElementById('status-msg').innerText = "Erro ao carregar M3U"; }
+            } catch(e) { document.getElementById('status-msg').innerText = "Erro ao sincronizar"; }
         }
 
         function renderChannels() {
@@ -263,7 +269,7 @@
                 const div = document.createElement('div');
                 div.className = 'channel-item';
                 div.onclick = () => iniciarPlayer(c.url, c.name);
-                div.innerHTML = `<img src="${c.logo || 'https://via.placeholder.com/70/111/00ff88?text=TV'}"><p>${c.name}</p>`;
+                div.innerHTML = `<img src="${c.logo || 'https://via.placeholder.com/70'}"><p>${c.name}</p>`;
                 display.appendChild(div);
             });
             document.getElementById('status-msg').innerText = "Grade Sincronizada";
