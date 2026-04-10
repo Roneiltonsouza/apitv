@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Apitv screen PRO - OFICIAL</title>
+    <title>API TV - OFICIAL</title>
     
     <script src="https://cdn.jsdelivr.net/npm/clappr@latest/dist/clappr.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/clappr-pip@latest/dist/clappr-pip.min.js"></script>
@@ -82,11 +82,14 @@
 
         .container { width: 95%; max-width: 900px; padding-bottom: 50px; }
         .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
-        .channel-item { background: var(--card); padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #222; cursor: pointer; }
+        .channel-item { background: var(--card); padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #222; cursor: pointer; position: relative; }
         .channel-item img { width: 60px; height: 60px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; background: #000;}
         .channel-item p { font-size: 11px; margin: 0; color: #ccc; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        /* Tag do Canal/Autor */
-        .author-tag { font-size: 8px; color: var(--premium); font-weight: bold; display: block; margin-top: 2px; text-transform: uppercase; }
+        
+        /* Layout do Autor no Card */
+        .author-box { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 5px; }
+        .author-img { width: 14px !important; height: 14px !important; border-radius: 50% !important; margin: 0 !important; }
+        .author-tag { font-size: 8px; color: var(--premium); font-weight: bold; text-transform: uppercase; }
 
         /* PAINÉIS ADM */
         #auth-panel, #private-panel { 
@@ -109,7 +112,7 @@
 <body>
 
     <header class="main-header" id="headerPrincipal">
-        <h1 class="header-title" onclick="location.reload()">APITV SCREEN</h1>
+        <h1 class="header-title" onclick="location.reload()">API TV</h1>
         <div class="header-row">
             <div class="floating-controls">
                 <div class="header-arrow-box" id="ledArrow" onclick="comandoAtalho()">
@@ -156,8 +159,9 @@
             </div>
             <div id="post-area" style="display:none;">
                 <h3 style="color: var(--led-blue); font-size: 14px; margin-top:0">EDITAR PERFIL DO CANAL</h3>
-                <input type="text" id="editChannelName" placeholder="Nome Exibido no Filme">
-                <button class="btn-action" style="background:#222; color:var(--led-blue); font-size:10px; padding:10px" onclick="atualizarPerfil()">SALVAR NOME DO CANAL</button>
+                <input type="text" id="editChannelName" placeholder="Nome do Canal/Autor">
+                <input type="text" id="editChannelImg" placeholder="Link da Foto do Perfil (URL)">
+                <button class="btn-action" style="background:#222; color:var(--led-blue); font-size:10px; padding:10px" onclick="atualizarPerfil()">SALVAR PERFIL</button>
                 <hr style="border: 1px solid #222; margin: 20px 0;">
 
                 <h3 style="color: var(--primary);">Publicar em FILMES GRÁTIS</h3>
@@ -310,7 +314,6 @@
             display.innerHTML = '';
             const searchTag = currentCategory.toLowerCase().trim();
             
-            // Linka o menu "Post filmes grátis" ao grupo "reve filmes" do banco
             const dbGroup = (searchTag === 'reve filmes') ? 'reve filmes' : searchTag;
 
             let list = (['live youtube', 'filmes', 'reve filmes'].includes(dbGroup)) 
@@ -323,8 +326,12 @@
                 const div = document.createElement('div');
                 div.className = 'channel-item';
                 div.onclick = () => iniciarPlayer(c.url, c.name);
-                const autor = c.author ? `<span class="author-tag">${c.author}</span>` : '';
-                div.innerHTML = `<img src="${c.logo || 'https://via.placeholder.com/70'}"><p>${c.name}</p>${autor}`;
+                
+                // Exibe imagem do autor se existir
+                const autorImg = c.authorImg ? `<img src="${c.authorImg}" class="author-img">` : '';
+                const autorStr = c.author ? `<div class="author-box">${autorImg}<span class="author-tag">${c.author}</span></div>` : '';
+                
+                div.innerHTML = `<img src="${c.logo || 'https://via.placeholder.com/70'}"><p>${c.name}</p>${autorStr}`;
                 display.appendChild(div);
             });
         }
@@ -389,6 +396,7 @@
                     document.getElementById('auth-card').style.display = 'none';
                     document.getElementById('post-area').style.display = 'block';
                     document.getElementById('editChannelName').value = userLogado.channelName || userLogado.nome;
+                    document.getElementById('editChannelImg').value = userLogado.channelImg || "";
                     listarMeusPosts();
                 } else alert("ID INVÁLIDO!");
             }
@@ -396,10 +404,12 @@
 
         async function atualizarPerfil() {
             const novoNome = document.getElementById('editChannelName').value;
+            const novaImg = document.getElementById('editChannelImg').value;
             await fetch(`${USER_URL}/${userLogado.fKey}.json?auth=${API_KEY}`, {
-                method: 'PATCH', body: JSON.stringify({ channelName: novoNome })
+                method: 'PATCH', body: JSON.stringify({ channelName: novoNome, channelImg: novaImg })
             });
             userLogado.channelName = novoNome;
+            userLogado.channelImg = novaImg;
             alert("Perfil Salvo!");
             loadCloud();
         }
@@ -411,7 +421,8 @@
                 logo: document.getElementById('pLogo').value, 
                 group: 'Reve Filmes',
                 owner: userLogado.id,
-                author: userLogado.channelName || userLogado.nome
+                author: userLogado.channelName || userLogado.nome,
+                authorImg: userLogado.channelImg || "" // Envia a imagem do perfil do autor
             };
             if(!data.name || !data.url) return alert("Preencha tudo!");
             await fetch(`${YT_URL}.json?auth=${API_KEY}`, { method: 'POST', body: JSON.stringify(data) });
