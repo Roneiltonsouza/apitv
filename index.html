@@ -82,6 +82,9 @@
         .interact-btn { background: none; border: none; color: white; font-size: 11px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; }
         .interact-btn span { font-size: 18px; }
 
+        #comment-section { display: none; padding: 10px; background: #0a0a0a; border-radius: 8px; margin-top: 5px; border: 1px solid #222; }
+        #comment-list { max-height: 80px; overflow-y: auto; font-size: 10px; color: #888; margin-top: 8px; text-align: left; }
+
         .container { width: 95%; max-width: 900px; padding-bottom: 50px; }
         .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
         .channel-item { background: var(--card); padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #222; cursor: pointer; position: relative; }
@@ -151,11 +154,21 @@
         <div class="video-interactions" id="videoInteractions">
             <div class="interact-bar">
                 <button class="interact-btn" id="likeBtn" onclick="toggleLike()"><span>👍</span> <b id="countLikes">0</b> Like</button>
-                <button class="interact-btn"><span>💬</span> Comentar</button>
-                <button class="interact-btn"><span>➕</span> Seguir</button>
+                <button class="interact-btn" id="commentBtn" onclick="toggleComments()"><span>💬</span> Comentar</button>
+                <button class="interact-btn" id="followBtn" onclick="toggleFollow()"><span>➕</span> Seguir</button>
                 <button class="interact-btn" id="shareBtn"><span>🔗</span> Compartilhar</button>
                 <button class="interact-btn"><span>👁️</span> <b id="countViews">0</b> Visualizações</button>
             </div>
+            <div id="comment-section">
+                <input type="text" id="commentInput" placeholder="Diga algo sobre este filme...">
+                <button class="btn-action" style="background:var(--primary); font-size:10px; padding:8px" onclick="enviarComentario()">PUBLICAR COMENTÁRIO</button>
+                <div id="comment-list"></div>
+            </div>
+        </div>
+
+        <div id="followedChannelsArea" style="display:none; margin-bottom: 20px;">
+            <p style="color:var(--premium); font-size:10px; font-weight:bold; margin-bottom:8px">CANAIS QUE VOCÊ SEGUE:</p>
+            <div id="followedGrid" class="channel-grid"></div>
         </div>
 
         <div id="channelDisplay" class="channel-grid"></div>
@@ -219,7 +232,9 @@
         const STATS_URL = "https://netbase-cloud-default-rtdb.firebaseio.com/stats";
         const ID_ACESSO = "netchaveapi";
         
-        let player, allChannels = [], ytChannels = [], usersList = {}, currentCategory = 'Vidyou tv Aberta', userLogado = null, currentAuthorView = null, videoIdAtual = null;
+        let player, allChannels = [], ytChannels = [], usersList = {}, currentCategory = 'Vidyou tv Aberta', userLogado = null, currentAuthorView = null, videoIdAtual = null, currentOwnerId = null;
+
+        let followedIds = JSON.parse(localStorage.getItem('api_tv_followed')) || [];
 
         function togglePopup() {
             const p = document.getElementById('genre-popup');
@@ -234,21 +249,105 @@
             } else { alert("Dê play em um canal primeiro!"); }
         }
 
-        // LÓGICA DE VISUALIZAÇÕES E LIKES REAIS (SEM MUDAR INTERFACE)
-        async function carregarInteracoes(id) {
+        async function carregarInteracoes(id, ownerId) {
             videoIdAtual = id;
+            currentOwnerId = ownerId;
             document.getElementById('videoInteractions').style.display = 'block';
+            
+            if(ownerId) {
+                document.getElementById('followBtn').style.opacity = '1';
+                document.getElementById('commentBtn').style.opacity = '1';
+                updateFollowBtnUI();
+            } else {
+                document.getElementById('followBtn').style.opacity = '0.3';
+                document.getElementById('commentBtn').style.opacity = '0.3';
+            }
 
-            // Incrementar View no Firebase
             const resV = await fetch(`${STATS_URL}/${id}/views.json?auth=${API_KEY}`);
             const views = await resV.json() || 0;
             const novasViews = views + 1;
             await fetch(`${STATS_URL}/${id}/views.json?auth=${API_KEY}`, { method: 'PUT', body: JSON.stringify(novasViews) });
             document.getElementById('countViews').innerText = novasViews;
 
-            // Carregar Likes
             const resL = await fetch(`${STATS_URL}/${id}/likes.json?auth=${API_KEY}`);
             document.getElementById('countLikes').innerText = await resL.json() || 0;
+
+            carregarComentarios(id);
+        }
+
+        async function carregarComentarios(id) {
+            const res = await fetch(`${STATS_URL}/${id}/comments.json?auth=${API_KEY}`);
+            const data = await res.json();
+            const list = document.getElementById('comment-list');
+            list.innerHTML = "";
+            if(data) {
+                Object.values(data).reverse().forEach(c => {
+                    list.innerHTML += `<div style="border-bottom:1px solid #222; padding:5px">- ${c.text}</div>`;
+                });
+            }
+        }
+
+        async function enviarComentario() {
+            if(!currentOwnerId) return alert("Comentários desativados para este canal.");
+            const input = document.getElementById('commentInput');
+            if(!input.value) return;
+            await fetch(`${STATS_URL}/${videoIdAtual}/comments.json?auth=${API_KEY}`, { method: 'POST', body: JSON.stringify({text: input.value}) });
+            input.value = "";
+            carregarComentarios(videoIdAtual);
+        }
+
+        function toggleComments() {
+            if(!currentOwnerId) return;
+            const sec = document.getElementById('comment-section');
+            sec.style.display = (sec.style.display === 'block') ? 'none' : 'block';
+        }
+
+        function toggleFollow() {
+            if(!currentOwnerId) return;
+            if(followedIds.includes(currentOwnerId)) {
+                followedIds = followedIds.filter(id => id !== currentOwnerId);
+            } else {
+                followedIds.push(currentOwnerId);
+            }
+            localStorage.setItem('api_tv_followed', JSON.stringify(followedIds));
+            updateFollowBtnUI();
+            renderFollowedSection();
+        }
+
+        function updateFollowBtnUI() {
+            const btn = document.getElementById('followBtn');
+            if(followedIds.includes(currentOwnerId)) {
+                btn.innerHTML = "<span>✔️</span> Seguindo";
+                btn.style.color = "var(--primary)";
+            } else {
+                btn.innerHTML = "<span>➕</span> Seguir";
+                btn.style.color = "white";
+            }
+        }
+
+        function renderFollowedSection() {
+            const area = document.getElementById('followedChannelsArea');
+            const grid = document.getElementById('followedGrid');
+            grid.innerHTML = "";
+            
+            if(followedIds.length === 0) {
+                area.style.display = 'none';
+                return;
+            }
+
+            area.style.display = 'block';
+            followedIds.forEach(id => {
+                const profile = Object.values(usersList).find(u => u.id === id);
+                if(profile) {
+                    const div = document.createElement('div');
+                    div.className = 'channel-item';
+                    div.style.border = '1px solid var(--primary)';
+                    div.onclick = () => { currentAuthorView = id; switchTab('Reve Filmes'); };
+                    div.innerHTML = `<img src="${profile.channelImg || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}" style="border-radius:50%"><p>${profile.channelName || profile.nome}</p>
+                    <small style="color:red; font-size:8px">CLIQUE PARA VER</small>`;
+                    grid.appendChild(div);
+                }
+            });
         }
 
         async function toggleLike() {
@@ -306,15 +405,15 @@
                 
                 const resYt = await fetch(`${YT_URL}.json?auth=${API_KEY}`);
                 const dataYt = await resYt.json();
-                const ytBox = document.getElementById('yt-manager-list');
-                ytBox.innerHTML = ''; ytChannels = [];
+                ytChannels = [];
                 if(dataYt) {
                     Object.keys(dataYt).forEach(id => {
                         ytChannels.push({ ...dataYt[id], id, group: dataYt[id].group || 'Live YouTube' });
-                        ytBox.innerHTML += `<div class="yt-manager-item"><span>${dataYt[id].name}</span><span style="color:red;cursor:pointer;font-weight:bold" onclick="excluirYt('${id}')">X</span></div>`;
                     });
                 }
                 renderChannels();
+                renderFollowedSection();
+                listarYtAdm(); // Atualiza lista do painel privado
                 if(userLogado) listarMeusPosts();
             } catch(e) { console.log(e); }
         }
@@ -373,16 +472,16 @@
             list.forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'channel-item';
-                div.onclick = () => iniciarPlayer(c.url, c.name);
+                div.onclick = () => iniciarPlayer(c.url, c.name, c.owner);
                 const autorStr = c.author ? `<div class="author-box"><img src="${c.authorImg || ''}" class="author-img"><span class="author-tag">${c.author}</span></div>` : '';
                 div.innerHTML = `<img src="${c.logo || 'https://via.placeholder.com/70'}"><p>${c.name}</p>${autorStr}`;
                 display.appendChild(div);
             });
         }
 
-        function iniciarPlayer(url, name) {
+        function iniciarPlayer(url, name, ownerId = null) {
             const id = btoa(name).replace(/=/g, "");
-            carregarInteracoes(id); // Chamando a função de interações reais
+            carregarInteracoes(id, ownerId); 
 
             const container = document.getElementById('player-wrapper');
             container.style.display = 'block';
@@ -477,8 +576,18 @@
         }
         async function excluirYt(id) { if(confirm("Excluir?")) { await fetch(`${YT_URL}/${id}.json?auth=${API_KEY}`, { method: 'DELETE' }); loadCloud(); } }
         
+        function listarYtAdm() {
+            const box = document.getElementById('yt-manager-list');
+            if(!box) return;
+            box.innerHTML = '<p style="font-size:10px; color:var(--primary); margin-bottom:5px">GERENCIAR CONTEÚDOS FIREBASE:</p>';
+            ytChannels.forEach(m => {
+                box.innerHTML += `<div class="yt-manager-item"><span>${m.name}</span><span style="color:red;cursor:pointer;font-weight:bold" onclick="excluirYt('${m.id}')">X</span></div>`;
+            });
+        }
+
         function listarMeusPosts() {
             const box = document.getElementById('meus-posts-lista');
+            if(!box) return;
             box.innerHTML = '<p style="font-size:10px; color:orange; margin-bottom:5px">MEUS FILMES PUBLICADOS:</p>';
             ytChannels.filter(c => c.owner === userLogado.id).forEach(m => {
                 box.innerHTML += `<div class="yt-manager-item"><span>${m.name}</span><span style="color:red;cursor:pointer;font-weight:bold" onclick="excluirYt('${m.id}')">X</span></div>`;
